@@ -1,8 +1,15 @@
+import requests
 import pandas as pd
+import numpy as np
+import os
+import time
+import psycopg2
+import psycopg2.extras
 
 # Load product information data
+dir_path = os.path.dirname(os.path.realpath(__file__)) + '/product_information/'
 file_name = 'product_information.csv'
-df_prd = pd.read_csv(file_name, dtype=str)
+df_prd = pd.read_csv(f"{dir_path}{file_name}", dtype=str)
 
 # Map category links to category names
 prd_dict = {
@@ -46,3 +53,72 @@ df_prd = df_prd.rename(
         'name': 'prd_name',
     }
 )
+
+# Download product images (It takes long long time)
+os.makedirs(f"{dir_path}/prd_img/", exist_ok=True)
+for idx, row in df_prd.iterrows():
+    img_url = row['prd_img']
+    img_id = row['prd_id']
+    response = requests.get(img_url)
+    if response.status_code == 200:
+        with open(f"{dir_path}/prd_img/{img_id}.jpg", "wb") as f:
+            f.write(response.content)
+    time.sleep(np.random.uniform(0.1, 0.35))
+
+# Add product image paths
+df_prd['prd_path'] = df_prd['prd_id']\
+    .apply(lambda x: f"{dir_path}prd_img/{x}.jpg")
+
+# Handle missing values as white spaces
+df_prd.loc[df_prd['review'].isnull(), 'review'] = ''
+df_prd.loc[df_prd['review_rating'].isnull(), 'review_rating'] = ''
+
+# Prepare data for database insertion
+cols = ['prd_id', 'category', 'prd_name', 
+        'price', 'review', 'review_rating', 'prd_path']
+db_insert = [tuple(_) for _ in df_prd[cols].to_numpy()]
+db_insert = [tuple(None if __ == '' else __ for __ in _) for _ in db_insert]
+
+# Connect to your PostgreSQL database
+db_conn = psycopg2.connect(
+    dbname="mydb",
+    user="myuser",
+    password="mypassword",
+    host="ollama-postgresql-1",
+    port="5432"
+)
+db_cur = db_conn.cursor()
+
+# Create schema and table
+query =\
+    """
+    CREATE SCHEMA product_similarity;
+    CREATE TABLE product_similarity.product_raw (
+        prd_id VARCHAR(30) PRIMARY KEY,
+        category VARCHAR(20),
+        prd_name TEXT,
+        price NUMERIC,
+        review NUMERIC,
+        review_rating NUMERIC,
+        prd_img TEXT
+    );
+    """
+db_cur.execute(query)
+db_conn.commit()
+
+# Insert data into the table
+query =\
+    """
+    INSERT INTO product_similarity.product_raw
+    (prd_id, category, prd_name, price, review, review_rating, prd_img)
+    VALUES %s
+    ON CONFLICT (prd_id) DO NOTHING;
+    """
+psycopg2.extras.execute_values(
+    cur=db_cur,
+    sql=query,
+    argslist=db_insert
+)
+db_conn.commit()
+db_cur.close()
+db_conn.close()
