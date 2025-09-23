@@ -89,23 +89,6 @@ db_conn = psycopg2.connect(
 )
 db_cur = db_conn.cursor()
 
-# Create schema and table
-query =\
-    """
-    CREATE SCHEMA product_similarity;
-    CREATE TABLE product_similarity.product_raw (
-        prd_id VARCHAR(30) PRIMARY KEY,
-        category VARCHAR(20),
-        prd_name TEXT,
-        price NUMERIC,
-        review NUMERIC,
-        review_rating NUMERIC,
-        prd_img TEXT
-    );
-    """
-db_cur.execute(query)
-db_conn.commit()
-
 # Insert data into the table
 query =\
     """
@@ -120,5 +103,4 @@ psycopg2.extras.execute_values(
     argslist=db_insert
 )
 db_conn.commit()
-db_cur.close()
 db_conn.close()
