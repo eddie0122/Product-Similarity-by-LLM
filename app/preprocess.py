@@ -3,7 +3,7 @@ import json
 import re
 from openai import OpenAI
 from openai import AsyncOpenAI
-
+import asyncpg
 
 def encode_image(image_path):
     """
@@ -37,15 +37,15 @@ def extract_json(text):
     return json_objects
 
 
-def recognize_image(service_url, service_key, llm, llm_temperature, system_role, img_path):
+def recognize_image(service_url, service_key, service_llm, service_temperature, service_role, img_path):
     """
     Recognizes the content of an image using a language model.
     Args:
         service_url (str): URL for LLM service
         service_key (str): API key for LLM service
-        llm (str): Name of the language model
-        system_role (str): System role description for the LLM
-        llm_temperature (float): Temperature setting for the LLM
+        service_llm (str): Name of the language model
+        service_role (str): System role description for the LLM
+        service_temperature (float): Temperature setting for the LLM
         img_path (str): Path to the image file
     Returns:
         status (boolean): Status of the operation (True/False)
@@ -83,7 +83,7 @@ def recognize_image(service_url, service_key, llm, llm_temperature, system_role,
                     [
                         {
                             "type": "text",
-                            "text": system_role
+                            "text": service_role
                         }
                     ],
             },
@@ -103,9 +103,9 @@ def recognize_image(service_url, service_key, llm, llm_temperature, system_role,
             }
         ]
         response = client.chat.completions.create(
-            model=llm,
+            model=service_llm,
             messages=messages,
-            temperature=llm_temperature,
+            temperature=service_temperature,
         )
         return {"status": True, "return": extract_json(response.choices[0].message.content)}
     except Exception as e:
@@ -113,15 +113,15 @@ def recognize_image(service_url, service_key, llm, llm_temperature, system_role,
         return {"status": False, "return": str(e)}
 
 
-async def recognize_image_async(service_url, service_key, llm, llm_temperature, system_role, img_path):
+async def recognize_image_async(service_url, service_key, service_llm, service_temperature, service_role, img_path):
     """
     Asynchronously recognizes the content of an image using a language model.
     Args:
         service_url (str): URL for LLM service
         service_key (str): API key for LLM service
-        llm (str): Name of the language model
-        system_role (str): System role description for the LLM
-        llm_temperature (float): Temperature setting for the LLM
+        service_llm (str): Name of the language model
+        service_role (str): System role description for the LLM
+        service_temperature (float): Temperature setting for the LLM
         img_path (str): Path to the image file
     Returns:
         dict: {
@@ -139,7 +139,7 @@ async def recognize_image_async(service_url, service_key, llm, llm_temperature, 
             {
                 "role": "system",
                 "content": [
-                    {"type": "text", "text": system_role}
+                    {"type": "text", "text": service_role}
                 ],
             },
             {
@@ -152,11 +152,87 @@ async def recognize_image_async(service_url, service_key, llm, llm_temperature, 
             }
         ]
         response = await client.chat.completions.create(
-            model=llm,
+            model=service_llm,
             messages=messages,
-            temperature=llm_temperature,
+            temperature=service_temperature,
         )
         return {"status": True, "return": extract_json(response.choices[0].message.content)}
     except Exception as e:
         print(f"Error: {e}")
         return {"status": False, "return": str(e)}
+
+
+def insert_product_trait_image(db_cur, prd_id, prd_desc):
+    try:
+        """
+        Inserts product trait data into the database.
+        Args:
+            db_cur: Database cursor
+            prd_id (str): Product ID
+            prd_desc (dict): Product description containing traits
+        """
+        query =\
+            """
+            INSERT INTO product_similarity.products_trait_image
+            (category1, category2, color, style, material, occasion, prd_id)
+            VALUES (%s, %s, %s, %s, %s, %s, %s);
+            """
+        db_cur.execute(
+            query,
+            (
+                prd_desc.get("category1"),
+                prd_desc.get("category2"),
+                prd_desc.get("color"),
+                prd_desc.get("style"),
+                prd_desc.get("material"),
+                prd_desc.get("occasion"),
+                prd_id,
+            )
+        )
+        db_cur.connection.commit()
+        return {"status": True, "return": f"Insert successful : {prd_id}"}
+    except Exception as e:
+        return {"status": False, "return": f"Insert failed : {prd_id}\n{str(e)}"}
+
+
+async def insert_product_trait_image_async(user, password, database, host, port, prd_id, prd_desc):
+    """
+    Asynchronously inserts product trait data into the database.
+    Args:
+        user (str): Database username
+        password (str): Database password
+        database (str): Database name
+        host (str): Database host
+        port (int): Database port
+        prd_id (str): Product ID
+        prd_desc (dict): Product description contains traits
+    Returns:
+        dict: status and message
+    """
+    try:
+        conn = await asyncpg.connect(
+            user=user,
+            password=password,
+            database=database,
+            host=host,
+            port=port
+        )
+        query = """
+            INSERT INTO product_similarity.products_trait_image
+            (category1, category2, color, style, material, occasion, prd_id)
+            VALUES ($1, $2, $3, $4, $5, $6, $7);
+        """
+        await conn.execute(
+            query,
+            prd_desc.get("category1"),
+            prd_desc.get("category2"),
+            prd_desc.get("color"),
+            prd_desc.get("style"),
+            prd_desc.get("material"),
+            prd_desc.get("occasion"),
+            prd_id,
+        )
+        await conn.close()
+        return {"status": True, "return": f"Insert successful : {prd_id}"}
+    except Exception as e:
+        return {"status": False, "return": f"Insert failed : {prd_id}\n{str(e)}"}
