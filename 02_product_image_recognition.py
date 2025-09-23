@@ -1,125 +1,34 @@
-from openai import OpenAI
-import base64
-import json
-import re
-import os
+import psycopg2
+import pandas as pd
+
+from app.preprocess import recognize_image, insert_product_trait_image
 
 
-def _encode_image(image_path):
+# Connect to your PostgreSQL database
+db_conn = psycopg2.connect(
+    dbname="mydb",
+    user="myuser",
+    password="mypassword",
+    host="ollama-postgresql-1",
+    port="5432"
+)
+db_cur = db_conn.cursor()
+
+# Fetch product id and path of images from the database
+query =\
     """
-    Load an image file and encode it to base64.
-    Args:
-        image_path (str): Path to the image file.
-    Returns:
-        byte: Base64 encoded image data.
+    SELECT prd_id,
+        prd_img
+    FROM product_similarity.product_raw
+    WHERE prd_img IS NOT NULL;
     """
-    with open(image_path, "rb") as img_file:
-        image_encoded = base64.b64encode(img_file.read()).decode("utf-8")
-    return image_encoded
+db_cur.execute(query=query)
+rows = db_cur.fetchall()
+df_prd = pd.DataFrame(rows, columns=[_[0] for _ in db_cur.description])
 
-
-def _extract_json(text):
+# LLM service configuration
+llm_role =\
     """
-    Extract JSON objects from a text string.
-    Args:
-        text (str): Input text containing JSON objects.
-    Returns:
-        list: A list of extracted JSON objects.
-    """
-    matches = re.findall(r'\{.*?\}', text, re.DOTALL)
-    json_objects = []
-    for match in matches:
-        try:
-            obj = json.loads(match)
-            json_objects.append(obj)
-        except json.JSONDecodeError:
-            continue
-    return json_objects
-
-def recognize_image(service_url, service_key, llm, llm_temperature, system_role, img_path):
-    """
-    Recognizes the content of an image using a language model.
-    Args:
-        service_url (str): URL for LLM service
-        service_key (str): API key for LLM service
-        llm (str): Name of the language model
-        system_role (str): System role description for the LLM
-        llm_temperature (float): Temperature setting for the LLM
-        img_path (str): Path to the image file
-    Returns:
-        status (boolean): Status of the operation (True/False)
-        return (list): Extracted JSON content or error message
-        
-            [
-                {
-                    "category1": "shirt",
-                    "category2": "t-shirt",
-                    "color": "white",
-                    "style": "oversized",
-                    "material": "cotton",
-                    "occasion": "casual"
-                },
-                {
-                    "category1": "pants",
-                    "category2": "chinos",
-                    "color": "blue",
-                    "style": "slim fit",
-                    "material": "silk",
-                    "occasion": "formal"
-                },
-            ]
-    """
-    try:
-        client = OpenAI(
-            base_url=service_url,
-            api_key=service_key,
-        )
-        encoded_image = _encode_image(img_path)
-        messages = [
-            {
-                "role": "system",
-                "content":
-                    [
-                        {
-                            "type": "text",
-                            "text": system_role
-                        }
-                    ],
-            },
-            {
-                "role": "user",
-                "content":
-                    [
-                        {
-                            "type": "text",
-                            "text": "What can you tell me about this image?"
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/jpeg;base64,{encoded_image}"}
-                        },
-                    ],
-            }
-        ]
-        response = client.chat.completions.create(
-            model=llm,
-            messages=messages,
-            temperature=llm_temperature,
-        )
-        return {"status": True, "return": _extract_json(response.choices[0].message.content)}
-    except Exception as e:
-        print(f"Error: {e}")
-        return {"status": False, "return": str(e)}
-
-
-# Directory containing product images
-dir_path = os.path\
-    .dirname(os.path.realpath(__file__)) + "/product_information/prd_img"
-file_names = os.listdir(dir_path)
-
-
-ollama_role =\
-    '''
     You are a helpful fashion assistant.
     You can analyze and describe fashion items in images. Be concise and accurate.
     Your responses should be json objects with the following keys: category, color, style, material, and occasion.
@@ -143,19 +52,35 @@ ollama_role =\
             "occasion": "formal"
         },
     ]
-    '''
-ollama_url = "http://ollama:11434/v1"
-ollama_key = "ollama"
-ollama_model = "ebdm/gemma3-enhanced:12b"
-ollama_temperature = 0.0
-img_path = f"{dir_path}/{file_names[6978]}"
+    """
+llm_url = "http://ollama:11434/v1"
+llm_key = "ollama"
+llm_model = "ebdm/gemma3-enhanced:12b"
+llm_temperature = 0.0
 
-result = recognize_image(
-    service_url=ollama_url,
-    service_key=ollama_key,
-    llm=ollama_model,
-    llm_temperature=ollama_temperature,
-    system_role=ollama_role,
-    img_path=img_path
-)
-print(result)
+# Process each product image and insert the recognized traits into the database
+for prd_id, prd_img in df_prd.itertuples(index=False):
+    result_recognize = recognize_image(
+        service_url=llm_url,
+        service_key=llm_key,
+        service_llm=llm_model,
+        service_temperature=llm_temperature,
+        service_role=llm_role,
+        img_path=prd_img
+    )
+    if result_recognize.get('status'):
+        prd_descs = result_recognize.get('return')
+        for prd_desc in prd_descs:
+            result_insert = insert_product_trait_image(
+                db_cur=db_cur,
+                prd_id=prd_id,
+                prd_desc=prd_desc
+            )
+            if not result_insert.get('status'):
+                print(
+                    f"Failed to insert product trait for product ID {prd_id}: {result_insert.get('return')}")
+    else:
+        print(
+            f"Failed to recognize image for product ID {prd_id}: {result_recognize.get('return')}")
+
+db_conn.close()
