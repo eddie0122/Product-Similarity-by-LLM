@@ -36,20 +36,20 @@ llm_role =\
     # Example response:
     [
         {
-            "category1": "shirt",
-            "category2": "t-shirt",
-            "color": "white",
-            "style": "oversized",
-            "material": "cotton",
-            "occasion": "casual"
+            "category1": "셔츠",
+            "category2": "티셔츠",
+            "color": "흰색",
+            "style": "오버사이즈",
+            "material": "면",
+            "occasion": "캐쥬얼"
         },
         {
-            "category1": "pants",
-            "category2": "chinos",
-            "color": "blue",
-            "style": "slim fit",
-            "material": "silk",
-            "occasion": "formal"
+            "category1": "바지",
+            "category2": "치노",
+            "color": "파랑",
+            "style": "슬림핏",
+            "material": "실크",
+            "occasion": "포멀"
         },
     ]
     """
