@@ -15,7 +15,7 @@ DB_CONFIG = {
 # LLM service configuration
 LLM_CONFIG = {
     "role":
-    """You are a helpful fashion assistant.
+"""You are a helpful fashion assistant.
 You can analyze and describe fashion items in images. Be concise and accurate.
 Your responses should be json objects with the following keys: category, color, style, material, and occasion.
 If you are unsure about any attribute, respond with "unknown" for that attribute.
