@@ -8,7 +8,7 @@ DB_CONFIG = {
     "database": "mydb",
     "user": "myuser",
     "password": "mypassword",
-    "host": "ollama-postgresql-1",
+    "host": "pgsql",
     "port": "5432"
 }
 
