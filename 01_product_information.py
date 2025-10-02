@@ -80,13 +80,14 @@ db_insert = [tuple(_) for _ in df_prd[cols].to_numpy()]
 db_insert = [tuple(None if __ == '' else __ for __ in _) for _ in db_insert]
 
 # Connect to your PostgreSQL database
-db_conn = psycopg2.connect(
-    dbname="mydb",
-    user="myuser",
-    password="mypassword",
-    host="ollama-postgresql-1",
-    port="5432"
-)
+DB_CONFIG = {
+    "database": "mydb",
+    "user": "myuser",
+    "password": "mypassword",
+    "host": "pgsql",
+    "port": "5432"
+}
+db_conn = psycopg2.connect(**DB_CONFIG)
 db_cur = db_conn.cursor()
 
 # Insert data into the table

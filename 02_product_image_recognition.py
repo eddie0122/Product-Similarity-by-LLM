@@ -5,13 +5,14 @@ from app.preprocess import recognize_image, insert_product_trait_image
 
 
 # Connect to your PostgreSQL database
-db_conn = psycopg2.connect(
-    dbname="mydb",
-    user="myuser",
-    password="mypassword",
-    host="ollama-postgresql-1",
-    port="5432"
-)
+DB_CONFIG = {
+    "database": "mydb",
+    "user": "myuser",
+    "password": "mypassword",
+    "host": "pgsql",
+    "port": "5432"
+}
+db_conn = psycopg2.connect(**DB_CONFIG)
 db_cur = db_conn.cursor()
 
 # Fetch product id and path of images from the database
