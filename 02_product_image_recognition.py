@@ -32,7 +32,7 @@ llm_role =\
     """
     You are a helpful fashion assistant.
     You can analyze and describe fashion items in images. Be concise and accurate.
-    Your responses should be json objects with the following keys: category, color, style, material, and occasion.
+    Your responses should be json objects with the following keys: category1, category2, color, style, material, and occasion. Each key should have only one value and written in Korean.
     If you are unsure about any attribute, respond with "unknown" for that attribute.
     # Example response:
     [
