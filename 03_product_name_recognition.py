@@ -1,0 +1,90 @@
+import psycopg2
+import pandas as pd
+
+from app.preprocess import recognize_text, insert_product_trait_text
+
+
+# Connect to your PostgreSQL database
+DB_CONFIG = {
+    "database": "mydb",
+    "user": "myuser",
+    "password": "mypassword",
+    "host": "pgsql",
+    "port": "5432"
+}
+db_conn = psycopg2.connect(**DB_CONFIG)
+db_cur = db_conn.cursor()
+
+# Fetch product id and path of images from the database
+query =\
+    """
+    SELECT prd_id,
+        prd_name
+    FROM product_similarity.product_raw
+    WHERE prd_img IS NOT NULL;
+    """
+db_cur.execute(query=query)
+rows = db_cur.fetchall()
+df_prd = pd.DataFrame(rows, columns=[_[0] for _ in db_cur.description])
+
+# LLM service configuration
+llm_role =\
+    """
+    You are a helpful fashion assistant.
+    You can analyze and describe fashion items in users' query. Be concise and accurate.
+    Your responses should be just one json object with the following keys: category1, category2, color, style, material, and occasion. Each key should have only one value and written in Korean.
+    If you are unsure about any attribute, respond with "unknown" for that attribute.
+    # Example response 1:
+    [
+        {
+            "category1": "셔츠",
+            "category2": "티셔츠",
+            "color": "흰색",
+            "style": "오버사이즈",
+            "material": "면",
+            "occasion": "캐쥬얼"
+        }
+    ]
+    # Example response 2:
+    [
+        {
+            "category1": "바지",
+            "category2": "치노",
+            "color": "파랑",
+            "style": "슬림핏",
+            "material": "실크",
+            "occasion": "포멀"
+        }
+    ]
+    """
+llm_url = "http://ollama:11434/v1"
+llm_key = "ollama"
+llm_model = "ebdm/gemma3-enhanced:12b"
+llm_temperature = 0.0
+
+# Process each product image and insert the recognized traits into the database
+for prd_id, prd_name in df_prd.itertuples(index=False):
+    result_recognize = recognize_text(
+        service_url=llm_url,
+        service_key=llm_key,
+        service_llm=llm_model,
+        service_temperature=llm_temperature,
+        service_role=llm_role,
+        text_query=prd_name
+    )
+    if result_recognize.get('status'):
+        prd_descs = result_recognize.get('return')
+        for prd_desc in prd_descs:
+            result_insert = insert_product_trait_text(
+                db_cur=db_cur,
+                prd_id=prd_id,
+                prd_desc=prd_desc
+            )
+            if not result_insert.get('status'):
+                print(
+                    f"Failed to insert product trait for product ID {prd_id}: {result_insert.get('return')}")
+    else:
+        print(
+            f"Failed to recognize image for product ID {prd_id}: {result_recognize.get('return')}")
+
+db_conn.close()
