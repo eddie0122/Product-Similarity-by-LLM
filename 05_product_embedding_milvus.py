@@ -19,27 +19,23 @@ db_cur = db_conn.cursor()
 
 # Fetch product id, product name and product traits from image
 query ="""
-SELECT prd_id,
+SELECT category,
+    prd_id,
     prd_name,
     CONCAT_WS(
         ' ',
-        CASE
-            WHEN category_high_img = 'unknown' THEN ''
-            ELSE category_high_img
-        END,
-        CASE
-            WHEN category_low_img = 'unknown' THEN ''
-            ELSE category_low_img
-        END,
-        CASE
-            WHEN style_img = 'unknown' THEN ''
-            ELSE style_img
-        END,
-        CASE
-            WHEN occasion_img = 'unknown' THEN ''
-            ELSE occasion_img
-        END
-    ) AS prd_desc_img
+        CASE WHEN text_cat1 = 'unknown' THEN '' ELSE text_cat1 END,
+        CASE WHEN text_cat2 = 'unknown' THEN '' ELSE text_cat2 END,
+        CASE WHEN text_style = 'unknown' THEN '' ELSE text_style END,
+        CASE WHEN text_occasion = 'unknown' THEN '' ELSE text_occasion END
+    ) AS prd_trait_text,
+    CONCAT_WS(
+        ' ',
+        CASE WHEN image_cat1 = 'unknown' THEN '' ELSE image_cat1 END,
+        CASE WHEN image_cat2 = 'unknown' THEN '' ELSE image_cat2 END,
+        CASE WHEN image_style = 'unknown' THEN '' ELSE image_style END,
+        CASE WHEN image_occasion = 'unknown' THEN '' ELSE image_occasion END
+    ) AS prd_trait_image
 FROM product_similarity.products_trait_information;
 """
 db_cur.execute(query=query)
@@ -66,10 +62,10 @@ fields = [
 
 schema = CollectionSchema(
     fields,
-    description="Embedding vector of product names & images"
+    description="Embedding vector of product names & traits from images and names"
 )
 
-collection = Collection("product_embedding", schema,)
+collection = Collection("product_embedding", schema)
 
 index_params = {
     "index_type": "IVF_FLAT",
@@ -92,11 +88,18 @@ prd_name_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_name['prd_name'].tolist()]
 
 # Prepare data for Milvus (product image based data)
-df_prd_img = df_prd[['prd_id', 'prd_desc_img']].drop_duplicates().copy()
+df_prd_img = df_prd[['prd_id', 'prd_trait_image']].drop_duplicates().copy()
 prd_img_ids = df_prd_img['prd_id'].tolist()
-prd_img_texts = df_prd_img['prd_desc_img'].tolist()
+prd_img_texts = df_prd_img['prd_trait_image'].tolist()
 prd_img_prompts =\
-    [prompt.format(instruct, _) for _ in df_prd_img['prd_desc_img'].tolist()]
+    [prompt.format(instruct, _) for _ in df_prd_img['prd_trait_image'].tolist()]
+
+# Prepare data for Milvus (product text(of name) based data)
+df_prd_txt = df_prd[['prd_id', 'prd_trait_text']].drop_duplicates().copy()
+prd_txt_ids = df_prd_txt['prd_id'].tolist()
+prd_txt_texts = df_prd_txt['prd_trait_text'].tolist()
+prd_txt_prompts =\
+    [prompt.format(instruct, _) for _ in df_prd_txt['prd_trait_text'].tolist()]
 
 
 # Batch insert into milvus
@@ -132,6 +135,14 @@ async def main():
             prd_texts=prd_img_texts,
             prd_tag='product_image',
             prd_prompts=prd_img_prompts,
+        ),
+        batch_insert(
+            collection=collection,
+            embedding_model=embedding_model,
+            prd_ids=prd_txt_ids,
+            prd_texts=prd_txt_texts,
+            prd_tag='product_text',
+            prd_prompts=prd_txt_prompts,
         ),
     )
 asyncio.run(main())
