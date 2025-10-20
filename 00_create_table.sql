@@ -47,3 +47,10 @@ CREATE TABLE IF NOT EXISTS product_similarity.products_trait_information (
     image_material VARCHAR(50),
     image_occasion VARCHAR(50)
 );
+
+CREATE TABLE IF NOT EXISTS product_similarity.products_similarity_score_inner (
+    prd_id VARCHAR(30) NOT NULL,
+    similarity_name_text NUMERIC NOT NULL,
+    similarity_name_image NUMERIC NOT NULL,
+    similarity_text_image NUMERIC NOT NULL
+);
