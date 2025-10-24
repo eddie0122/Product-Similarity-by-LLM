@@ -16,7 +16,9 @@ INSERT INTO product_similarity.products_trait_information (
             pti.occasion AS image_occasion
         FROM product_similarity.product_raw AS prw
             LEFT JOIN product_similarity.products_trait_text AS ptt ON prw.prd_id = ptt.prd_id
+            AND ptt.category1 != 'unknown'
             LEFT JOIN product_similarity.products_trait_image AS pti ON prw.prd_id = pti.prd_id
+            AND pti.category1 != 'unknown'
         WHERE ptt.prd_id IS NOT NULL
             AND pti.prd_id IS NOT NULL
     );
