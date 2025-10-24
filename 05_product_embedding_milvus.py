@@ -43,6 +43,13 @@ rows = db_cur.fetchall()
 df_prd = pd.DataFrame(rows, columns=[_[0] for _ in db_cur.description])
 db_conn.close()
 
+# Remove white spaces in traits from product names & images
+df_prd['prd_trait_text'] = df_prd['prd_trait_text'].str.strip()
+df_prd['prd_trait_image'] = df_prd['prd_trait_image'].str.strip()
+for col in ['prd_trait_text', 'prd_trait_image']:
+    for ix in range(5, 1, -1):
+        idx = df_prd[df_prd[col].str.contains(' '*ix)].index
+        df_prd.loc[idx, col] = df_prd.loc[idx, col].str.replace(' '*ix, ' ')
 
 # Milvus lite inintial setting
 os.makedirs('./milvus_db', exist_ok=True)
@@ -80,21 +87,21 @@ embedding_model = SentenceTransformer("Qwen/Qwen3-Embedding-0.6B")
 instruct = "패션 의류 및 아이템 상품 유사도 분류"
 prompt = "Instruct: {}\nQuery: {}"
 
-# Prepare data for Milvus (product name based data)
+# Prepare embedding data for Milvus (from product names)
 df_prd_name = df_prd[['prd_id', 'prd_name']].drop_duplicates('prd_id').copy()
 prd_name_ids = df_prd_name['prd_id'].tolist()
 prd_name_texts = df_prd_name['prd_name'].tolist()
 prd_name_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_name['prd_name'].tolist()]
 
-# Prepare data for Milvus (product image based data)
+# Prepare embedding data for Milvus (from traits of product images)
 df_prd_img = df_prd[['prd_id', 'prd_trait_image']].drop_duplicates().copy()
 prd_img_ids = df_prd_img['prd_id'].tolist()
 prd_img_texts = df_prd_img['prd_trait_image'].tolist()
 prd_img_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_img['prd_trait_image'].tolist()]
 
-# Prepare data for Milvus (product text(of name) based data)
+# Prepare embedding data for Milvus (from traits of product names)
 df_prd_txt = df_prd[['prd_id', 'prd_trait_text']].drop_duplicates().copy()
 prd_txt_ids = df_prd_txt['prd_id'].tolist()
 prd_txt_texts = df_prd_txt['prd_trait_text'].tolist()
