@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS product_similarity.products_trait_text (
 
 CREATE TABLE IF NOT EXISTS product_similarity.products_trait_information (
     prd_id VARCHAR(30) NOT NULL,
+    prd_id_seq INT,
     category VARCHAR(20) NOT NULL,
     prd_name TEXT NOT NULL,
     text_cat1 VARCHAR(30),

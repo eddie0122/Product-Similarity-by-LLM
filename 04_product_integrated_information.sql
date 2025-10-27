@@ -1,5 +1,6 @@
 INSERT INTO product_similarity.products_trait_information (
         SELECT prw.prd_id,
+            ROW_NUMBER() OVER(PARTITION BY prw.prd_id) AS prd_id_seq,
             prw.category,
             prw.prd_name,
             ptt.category1 AS text_cat1,
