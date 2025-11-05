@@ -5,6 +5,39 @@ import psycopg2
 import asyncio
 import os
 
+
+# Milvus lite inintial setting
+os.makedirs('./milvus_db', exist_ok=True)
+connections.connect(
+    alias="default",
+    uri="./milvus_db/product_similarity.db"
+)
+
+fields = [
+    FieldSchema(
+        name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+    FieldSchema(name="prd_id", dtype=DataType.VARCHAR, max_length=50),
+    FieldSchema(name="prd_id_seq", dtype=DataType.INT16),
+    FieldSchema(name="prd_text", dtype=DataType.VARCHAR, max_length=500),
+    FieldSchema(name="prd_tag", dtype=DataType.VARCHAR, max_length=50),
+    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
+]
+
+schema = CollectionSchema(
+    fields,
+    description="Embedding vector of product names & traits from images and names"
+)
+
+collection = Collection("product_embedding", schema)
+
+index_params = {
+    "index_type": "IVF_FLAT",
+    "metric_type": "COSINE",
+    "params": {"nlist": 128}
+}
+collection.create_index("embedding", index_params)
+
+
 # DB connection information
 DB_CONFIG = {
     "database": "mydb",
@@ -21,6 +54,7 @@ db_cur = db_conn.cursor()
 query ="""
 SELECT category,
     prd_id,
+    prd_id_seq,
     prd_name,
     CONCAT_WS(
         ' ',
@@ -44,43 +78,12 @@ df_prd = pd.DataFrame(rows, columns=[_[0] for _ in db_cur.description])
 db_conn.close()
 
 # Remove white spaces in traits from product names & images
-df_prd['prd_trait_text'] = df_prd['prd_trait_text'].str.strip()
-df_prd['prd_trait_image'] = df_prd['prd_trait_image'].str.strip()
 for col in ['prd_trait_text', 'prd_trait_image']:
-    for ix in range(5, 1, -1):
-        idx = df_prd[df_prd[col].str.contains(' '*ix)].index
-        df_prd.loc[idx, col] = df_prd.loc[idx, col].str.replace(' '*ix, ' ')
-
-# Milvus lite inintial setting
-os.makedirs('./milvus_db', exist_ok=True)
-connections.connect(
-    alias="default",
-    uri="./milvus_db/product_similarity.db"
-)
-
-fields = [
-    FieldSchema(
-        name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
-    FieldSchema(name="prd_id", dtype=DataType.VARCHAR, max_length=50),
-    FieldSchema(name="prd_text", dtype=DataType.VARCHAR, max_length=500),
-    FieldSchema(name="prd_tag", dtype=DataType.VARCHAR, max_length=50),
-    FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=1024),
-]
-
-schema = CollectionSchema(
-    fields,
-    description="Embedding vector of product names & traits from images and names"
-)
-
-collection = Collection("product_embedding", schema)
-
-index_params = {
-    "index_type": "IVF_FLAT",
-    "metric_type": "COSINE",
-    "params": {"nlist": 128}
-}
-collection.create_index("embedding", index_params)
-
+    df_prd[col] = df_prd[col].map(
+        lambda x: ' '.join(
+            filter(None, list(set(x.split(' '))))
+        )
+    )
 
 # Load embedding model & prompt
 embedding_model = SentenceTransformer("Qwen/Qwen3-Embedding-0.6B")
@@ -90,13 +93,16 @@ prompt = "Instruct: {}\nQuery: {}"
 # Prepare embedding data for Milvus (from product names)
 df_prd_name = df_prd[['prd_id', 'prd_name']].drop_duplicates('prd_id').copy()
 prd_name_ids = df_prd_name['prd_id'].tolist()
+prd_name_seqs = [1] * len(prd_name_ids)
 prd_name_texts = df_prd_name['prd_name'].tolist()
 prd_name_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_name['prd_name'].tolist()]
 
 # Prepare embedding data for Milvus (from traits of product images)
-df_prd_img = df_prd[['prd_id', 'prd_trait_image']].drop_duplicates().copy()
+df_prd_img = df_prd[['prd_id', 'prd_id_seq', 'prd_trait_image']]\
+    .drop_duplicates().copy()
 prd_img_ids = df_prd_img['prd_id'].tolist()
+prd_img_seqs = df_prd_img['prd_id_seq'].tolist()
 prd_img_texts = df_prd_img['prd_trait_image'].tolist()
 prd_img_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_img['prd_trait_image'].tolist()]
@@ -104,23 +110,25 @@ prd_img_prompts =\
 # Prepare embedding data for Milvus (from traits of product names)
 df_prd_txt = df_prd[['prd_id', 'prd_trait_text']].drop_duplicates().copy()
 prd_txt_ids = df_prd_txt['prd_id'].tolist()
+prd_txt_seqs = [1] * len(prd_txt_ids)
 prd_txt_texts = df_prd_txt['prd_trait_text'].tolist()
 prd_txt_prompts =\
     [prompt.format(instruct, _) for _ in df_prd_txt['prd_trait_text'].tolist()]
 
 
 # Batch insert into milvus
-async def batch_insert(collection, embedding_model, prd_ids, prd_texts, prd_tag, prd_prompts, batch_size=1000):
+async def batch_insert(collection, embedding_model, prd_ids, prd_seqs, prd_texts, prd_tag, prd_prompts, batch_size=2000):
     loop = asyncio.get_event_loop()
 
     for i in range(0, len(prd_ids), batch_size):
         batch_ids = prd_ids[i:i+batch_size]
+        batch_seqs = prd_seqs[i:i+batch_size]
         batch_texts = prd_texts[i:i+batch_size]
         batch_prompts = prd_prompts[i:i+batch_size]
         batch_tags = [prd_tag] * len(batch_ids)
 
         embeddings = await loop.run_in_executor(None, embedding_model.encode, batch_prompts)
-        await loop.run_in_executor(None, collection.insert, [batch_ids, batch_texts, batch_tags, embeddings])
+        await loop.run_in_executor(None, collection.insert, [batch_ids, batch_seqs, batch_texts, batch_tags, embeddings])
     await loop.run_in_executor(None, collection.flush)
 
 
@@ -131,6 +139,7 @@ async def main():
             collection=collection,
             embedding_model=embedding_model,
             prd_ids=prd_name_ids,
+            prd_seqs=prd_name_seqs,
             prd_texts=prd_name_texts,
             prd_tag='product_name',
             prd_prompts=prd_name_prompts,
@@ -139,6 +148,7 @@ async def main():
             collection=collection,
             embedding_model=embedding_model,
             prd_ids=prd_img_ids,
+            prd_seqs=prd_img_seqs,
             prd_texts=prd_img_texts,
             prd_tag='product_image',
             prd_prompts=prd_img_prompts,
@@ -147,6 +157,7 @@ async def main():
             collection=collection,
             embedding_model=embedding_model,
             prd_ids=prd_txt_ids,
+            prd_seqs=prd_txt_seqs,
             prd_texts=prd_txt_texts,
             prd_tag='product_text',
             prd_prompts=prd_txt_prompts,
