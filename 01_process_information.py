@@ -5,11 +5,14 @@ import os
 import time
 import psycopg2
 import psycopg2.extras
+import yaml
+
+# Set root path
+root_path = f"{os.path.dirname(os.path.realpath(__file__))}/"
 
 # Load product information data
-dir_path = os.path.dirname(os.path.realpath(__file__)) + '/product_information/'
-file_name = 'product_information.csv'
-df_prd = pd.read_csv(f"{dir_path}{file_name}", dtype=str)
+prd_path = f"{root_path}/product_information/"
+df_prd = pd.read_csv(f"{prd_path}/product_information.csv", dtype=str)
 
 # Map category links to category names
 prd_dict = {
@@ -55,19 +58,19 @@ df_prd = df_prd.rename(
 )
 
 # Download product images (It takes long long time)
-os.makedirs(f"{dir_path}/prd_img/", exist_ok=True)
+os.makedirs(f"{prd_path}/prd_img/", exist_ok=True)
 for idx, row in df_prd.iterrows():
     img_url = row['prd_img']
     img_id = row['prd_id']
     response = requests.get(img_url)
     if response.status_code == 200:
-        with open(f"{dir_path}/prd_img/{img_id}.jpg", "wb") as f:
+        with open(f"{prd_path}/prd_img/{img_id}.jpg", "wb") as f:
             f.write(response.content)
     time.sleep(np.random.uniform(0.1, 0.35))
 
 # Add product image paths
 df_prd['prd_path'] = df_prd['prd_id']\
-    .apply(lambda x: f"{dir_path}prd_img/{x}.jpg")
+    .apply(lambda x: f"{prd_path}prd_img/{x}.jpg")
 
 # Handle missing values as white spaces
 df_prd.loc[df_prd['review'].isnull(), 'review'] = ''
@@ -80,14 +83,9 @@ db_insert = [tuple(_) for _ in df_prd[cols].to_numpy()]
 db_insert = [tuple(None if __ == '' else __ for __ in _) for _ in db_insert]
 
 # Connect to your PostgreSQL database
-DB_CONFIG = {
-    "database": "mydb",
-    "user": "myuser",
-    "password": "mypassword",
-    "host": "pgsql",
-    "port": "5432"
-}
-db_conn = psycopg2.connect(**DB_CONFIG)
+with open(f"{root_path}/configuration/config.yml", "r") as f:
+    conf = yaml.safe_load(f)
+db_conn = psycopg2.connect(**conf["postgresql"])
 db_cur = db_conn.cursor()
 
 # Insert data into the table
