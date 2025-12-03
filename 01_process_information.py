@@ -102,4 +102,39 @@ psycopg2.extras.execute_values(
     argslist=db_insert
 )
 db_conn.commit()
+
+# Drop duplicate product names
+query =\
+    """
+    INSERT INTO product_similarity.product_information (
+        SELECT prd_id,
+            category,
+            prd_name,
+            price,
+            review,
+            review_rating,
+            prd_img
+        FROM (
+                SELECT prd_id,
+                    category,
+                    TRIM(prd_name) AS prd_name,
+                    price,
+                    review,
+                    review_rating,
+                    prd_img,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY TRIM(prd_name)
+                        ORDER BY review DESC,
+                            review_rating DESC,
+                            price,
+                            prd_id
+                    ) AS row_rank
+                FROM product_similarity.product_raw
+            )
+        WHERE row_rank = 1
+    );
+    """
+db_cur.execute(query=query)
+db_conn.commit()
+
 db_conn.close()
