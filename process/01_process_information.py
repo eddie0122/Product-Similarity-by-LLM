@@ -7,8 +7,8 @@ import psycopg2
 import psycopg2.extras
 import yaml
 
-# Set root path
-root_path = f"{os.path.dirname(os.path.realpath(__file__))}/"
+# Set root path (parent directory of the script)
+root_path = f"{os.path.dirname(os.path.dirname(os.path.realpath(__file__)))}/"
 
 # Load product information data
 prd_path = f"{root_path}/product_information/"
