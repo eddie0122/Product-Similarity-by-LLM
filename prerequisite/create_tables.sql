@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS product_similarity.product_information (
     prd_img TEXT
 );
 
+CREATE TABLE IF NOT EXISTS product_similarity.product_rename (
+    prd_id VARCHAR(30) PRIMARY KEY,
+    prd_rename TEXT
+);
+
 CREATE TABLE IF NOT EXISTS product_similarity.products_trait_image (
     category1 VARCHAR(30),
     category2 VARCHAR(30),

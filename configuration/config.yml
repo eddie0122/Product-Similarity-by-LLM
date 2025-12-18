@@ -9,4 +9,4 @@ ollama:
   api_key: ollama
 model:
   temperature: 0
-  qwen3: qwen3:4b-instruct-2507-fp16
+  qwen3_4b_instruct: qwen3:4b-instruct-2507-fp16
