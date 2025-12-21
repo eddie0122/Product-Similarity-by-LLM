@@ -25,25 +25,24 @@ CREATE TABLE IF NOT EXISTS product_similarity.product_rename (
     prd_rename TEXT
 );
 
-CREATE TABLE IF NOT EXISTS product_similarity.products_trait_image (
+CREATE TABLE IF NOT EXISTS product_similarity.product_image (
     category1 VARCHAR(30),
     category2 VARCHAR(30),
-    color VARCHAR(50),
+    color_tone VARCHAR(50),
     style VARCHAR(50),
-    material VARCHAR(50),
     occasion VARCHAR(50),
     prd_id VARCHAR(30) NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS product_similarity.products_trait_text (
-    category1 VARCHAR(30),
-    category2 VARCHAR(30),
-    color VARCHAR(50),
-    style VARCHAR(50),
-    material VARCHAR(50),
-    occasion VARCHAR(50),
-    prd_id VARCHAR(30) NOT NULL
-);
+-- CREATE TABLE IF NOT EXISTS product_similarity.products_trait_text (
+--     category1 VARCHAR(30),
+--     category2 VARCHAR(30),
+--     color VARCHAR(50),
+--     style VARCHAR(50),
+--     material VARCHAR(50),
+--     occasion VARCHAR(50),
+--     prd_id VARCHAR(30) NOT NULL
+-- );
 
 CREATE TABLE IF NOT EXISTS product_similarity.products_trait_information (
     prd_id VARCHAR(30) NOT NULL,
