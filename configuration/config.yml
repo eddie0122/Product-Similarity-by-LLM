@@ -10,3 +10,4 @@ ollama:
 model:
   temperature: 0
   qwen3_4b_instruct: qwen3:4b-instruct-2507-fp16
+  gemma3_12b: gemma3:12b
